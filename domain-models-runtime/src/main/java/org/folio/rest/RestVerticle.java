@@ -69,6 +69,8 @@ import org.kie.api.runtime.rule.FactHandle;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Joiner;
 import com.google.common.io.ByteStreams;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class RestVerticle extends AbstractVerticle {
   
@@ -131,6 +133,35 @@ public class RestVerticle extends AbstractVerticle {
       }
     }
     return hBest;
+  }
+
+  @Override
+  public void init(Vertx vertx, Context context) {
+    super.init(vertx, context);
+
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      public void run() {
+        MongoCRUD.stopEmbeddedMongo();
+        PostgresClient.stopEmbeddedPostgres();
+        try {
+          droolsSession.dispose();
+        } catch (Exception e) {/*ignore*/
+          ;
+        }
+        CountDownLatch latch = new CountDownLatch(1);
+        try {
+          runShutdownHook(ar -> {
+            latch.countDown();
+          });
+          if (!latch.await(2, TimeUnit.MINUTES)) {
+            log.error("Timed out waiting to undeploy all");
+          }
+        } catch (Exception e) { /*ignore*/
+          ;
+        }
+        LogUtil.closeLogger();
+      }
+    });
   }
 
   @Override
@@ -678,26 +709,6 @@ public class RestVerticle extends AbstractVerticle {
       });
     });
     return mappedURLs;
-  }
-
-  @Override
-  public void stop(Future<Void> stopFuture) throws Exception {
-    // TODO Auto-generated method stub
-    super.stop();
-    MongoCRUD.stopEmbeddedMongo();
-    PostgresClient.stopEmbeddedPostgres();
-    try {
-      droolsSession.dispose();
-    } catch (Exception e) {/*ignore*/}
-    // removes the .lck file associated with the log file
-    LogUtil.closeLogger();
-    runShutdownHook(v -> {
-      if (v.succeeded()) {
-        stopFuture.complete();
-      } else {
-        stopFuture.fail("shutdown hook failed....");
-      }
-    });
   }
 
   /*
