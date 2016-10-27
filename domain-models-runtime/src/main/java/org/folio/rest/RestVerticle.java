@@ -141,6 +141,7 @@ public class RestVerticle extends AbstractVerticle {
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       public void run() {
+        System.out.println("shutdown hook running..........");
         MongoCRUD.stopEmbeddedMongo();
         PostgresClient.stopEmbeddedPostgres();
         try {
